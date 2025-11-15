@@ -11,8 +11,7 @@ const {
   updateProduct,
   deleteProduct
 } = require('../controllers/productController');
-const { protect } = require('../middleware/auth');
-const { admin } = require('../middleware/admin');
+const { protect, isAdmin } = require('../middleware/auth');
 const { uploadMultiple } = require('../middleware/upload');
 const {
   createProductValidation,
@@ -33,7 +32,7 @@ router.get('/:id', mongoIdValidation, handleValidationErrors, getProduct);
 router.post(
   '/',
   protect,
-  admin,
+  isAdmin,
   uploadMultiple,
   createProductValidation,
   handleValidationErrors,
@@ -43,7 +42,7 @@ router.post(
 router.put(
   '/:id',
   protect,
-  admin,
+  isAdmin,
   uploadMultiple,
   mongoIdValidation,
   updateProductValidation,
@@ -54,7 +53,7 @@ router.put(
 router.delete(
   '/:id',
   protect,
-  admin,
+  isAdmin,
   mongoIdValidation,
   handleValidationErrors,
   deleteProduct

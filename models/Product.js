@@ -15,7 +15,7 @@ const productSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: [true, 'Please provide product description'],
+    required: false, // ✅ Made optional
     maxlength: [2000, 'Description cannot exceed 2000 characters']
   },
   shortDescription: {
@@ -75,7 +75,11 @@ const productSchema = new mongoose.Schema({
       required: true 
     },
     public_id: String,
-    alt: String
+    alt: String,
+    order: { 
+      type: Number, 
+      default: 0 
+    }
   }],
   stock: {
     type: Number,
@@ -110,7 +114,7 @@ const productSchema = new mongoose.Schema({
     },
     condition: { 
       type: String, 
-      enum: ['New', 'Used', 'Refurbished'], 
+      enum: ['New', 'Ex-Japan'], // ✅ Matches your constants exactly
       default: 'New' 
     }
   },
@@ -146,6 +150,14 @@ const productSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isVisible: {
+    type: Boolean,
+    default: true
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true,

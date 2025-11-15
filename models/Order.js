@@ -90,6 +90,11 @@ const orderSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+   
+adminNotes: {
+  type: String,
+  select: false  // Hidden from customer views
+},
     note: String,
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,

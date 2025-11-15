@@ -1073,44 +1073,50 @@ async function seedDatabase() {
     await Order.deleteMany({});
     console.log('✅ Existing data cleared\n');
 
-    // Create admin user
-    console.log('👤 Creating admin user...');
-    const hashedPassword = await bcrypt.hash('wanjiku2025', 10);
-    const admin = await User.create({
-      name: 'Jomo Admin',
-      email: 'jomo@autoworld.co.ke',
-      password: hashedPassword,
-      phone: '+254712345678',
-      role: 'admin',
-      isVerified: true,
-      isActive: true
-    });
-    console.log('✅ Admin user created');
-    console.log(`   Email: ${admin.email}`);
-    console.log(`   Password: wanjiku2025\n`);
+// scripts/seed.js
 
-    // Create sample customer
-    console.log('👤 Creating sample customer...');
-    const customerPassword = await bcrypt.hash('Customer@123', 10);
-    const customer = await User.create({
-      name: 'John Kamau',
-      email: 'customer@example.com',
-      password: customerPassword,
-      phone: '+254723456789',
-      role: 'customer',
-      isVerified: true,
-      isActive: true,
-      addresses: [{
-        street: '123 Kenyatta Avenue',
-        city: 'Nairobi',
-        county: 'Nairobi',
-        country: 'Kenya',
-        isDefault: true
-      }]
-    });
-    console.log('✅ Sample customer created');
-    console.log(`   Email: customer@example.com`);
-    console.log(`   Password: Customer@123\n`);
+// CREATE ADMIN USER - Remove manual hashing
+console.log('👤 Creating admin user...');
+// ❌ Remove this line:
+// const hashedPassword = await bcrypt.hash('wanjiku2025', 10);
+
+const admin = await User.create({
+  name: 'Jomo Admin',
+  email: 'jomo@autoworld.co.ke',
+  password: 'wanjiku2025', // ✅ Pass plain password, let the model hash it
+  phone: '+254712345678',
+  role: 'admin',
+  isVerified: true,
+  isActive: true
+});
+console.log('✅ Admin user created');
+console.log(`   Email: ${admin.email}`);
+console.log(`   Password: wanjiku2025\n`);
+
+// CREATE SAMPLE CUSTOMER - Remove manual hashing
+console.log('👤 Creating sample customer...');
+// ❌ Remove this line:
+// const customerPassword = await bcrypt.hash('Customer@123', 10);
+
+const customer = await User.create({
+  name: 'John Kamau',
+  email: 'customer@example.com',
+  password: 'Customer@123', // ✅ Pass plain password, let the model hash it
+  phone: '+254723456789',
+  role: 'customer',
+  isVerified: true,
+  isActive: true,
+  addresses: [{
+    street: '123 Kenyatta Avenue',
+    city: 'Nairobi',
+    county: 'Nairobi',
+    country: 'Kenya',
+    isDefault: true
+  }]
+});
+console.log('✅ Sample customer created');
+console.log(`   Email: customer@example.com`);
+console.log(`   Password: Customer@123\n`);
 
     // Create categories
     console.log('📁 Creating categories...');

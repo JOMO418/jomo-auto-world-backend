@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "seed": "node scripts/seed.js",
-    "test": "jest --watchAll --verbose"
+    "seed:categories": "node seeds/categories.js"
   },
   "keywords": [
     "auto",
@@ -17,7 +16,7 @@
     "kenya",
     "mpesa"
   ],
-  "author": "Brandy Software Solutions",
+  "author": "Jomo Software Solutions",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.2",

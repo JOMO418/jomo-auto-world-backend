@@ -13,7 +13,7 @@ exports.getProducts = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Build filter object
-    const filter = { isActive: true };
+    const filter = { isActive: true, isVisible: true };
 
     // Category filter
     if (req.query.category) {
@@ -165,6 +165,7 @@ exports.getFeaturedProducts = async (req, res) => {
     const products = await Product.find({ 
       featured: true, 
       isActive: true,
+      isVisible: true,
       inStock: true
     })
       .populate('category', 'name slug')
@@ -192,6 +193,7 @@ exports.getBestSellers = async (req, res) => {
     const products = await Product.find({ 
       bestSeller: true, 
       isActive: true,
+      isVisible: true,
       inStock: true
     })
       .populate('category', 'name slug')
@@ -227,7 +229,8 @@ exports.searchProducts = async (req, res) => {
 
     const products = await Product.find({
       $text: { $search: q },
-      isActive: true
+      isActive: true,
+      isVisible: true
     })
       .populate('category', 'name slug')
       .limit(20)
@@ -247,36 +250,43 @@ exports.searchProducts = async (req, res) => {
 };
 
 // @desc    Create new product
-// @route   POST /api/products
+// @route   POST /api/admin/products
 // @access  Private/Admin
 exports.createProduct = async (req, res) => {
   try {
-    // Upload images if provided
-    let images = [];
-    if (req.files && req.files.length > 0) {
-      const uploadedImages = await uploadMultipleImages(
-        req.files.map(file => file.buffer.toString('base64')),
-        'jomo-auto-parts'
-      );
-      images = uploadedImages.map(img => ({
-        url: img.url,
-        public_id: img.public_id,
-        alt: req.body.name
-      }));
+    console.log('📦 Creating product with data:', req.body);
+
+    // Find category by slug and get the ObjectId
+    let categoryId = req.body.category;
+    
+    if (req.body.category && typeof req.body.category === 'string') {
+      const category = await Category.findOne({ slug: req.body.category });
+      if (!category) {
+        return res.status(400).json({
+          success: false,
+          message: `Category with slug '${req.body.category}' not found. Please create categories first.`
+        });
+      }
+      categoryId = category._id;
     }
 
+    // Prepare product data
     const productData = {
       ...req.body,
-      images: images.length > 0 ? images : req.body.images || []
+      category: categoryId,
+      createdBy: req.user._id,
+      images: req.body.images || []
     };
 
+    console.log('✅ Prepared product data:', productData);
+
+    // Create product
     const product = await Product.create(productData);
 
-    // Update category product count
-    const category = await Category.findById(product.category);
-    if (category) {
-      await category.updateProductCount();
-    }
+    // Populate category for response
+    await product.populate('category', 'name slug');
+
+    console.log('✅ Product created successfully:', product._id);
 
     res.status(201).json({
       success: true,
@@ -284,7 +294,7 @@ exports.createProduct = async (req, res) => {
       product
     });
   } catch (error) {
-    console.error('Create product error:', error);
+    console.error('❌ Create product error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to create product'
@@ -293,10 +303,13 @@ exports.createProduct = async (req, res) => {
 };
 
 // @desc    Update product
-// @route   PUT /api/products/:id
+// @route   PUT /api/admin/products/:id
 // @access  Private/Admin
 exports.updateProduct = async (req, res) => {
   try {
+    console.log('📝 Updating product:', req.params.id);
+    console.log('📝 Update data:', req.body);
+
     let product = await Product.findById(req.params.id);
 
     if (!product) {
@@ -306,34 +319,25 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    // Handle image uploads if provided
-    if (req.files && req.files.length > 0) {
-      // Delete old images from Cloudinary
-      if (product.images && product.images.length > 0) {
-        for (const img of product.images) {
-          if (img.public_id) {
-            await deleteImage(img.public_id);
-          }
-        }
+    // Handle category slug to ObjectId conversion
+    if (req.body.category && typeof req.body.category === 'string') {
+      const category = await Category.findOne({ slug: req.body.category });
+      if (category) {
+        req.body.category = category._id;
       }
-
-      // Upload new images
-      const uploadedImages = await uploadMultipleImages(
-        req.files.map(file => file.buffer.toString('base64')),
-        'jomo-auto-parts'
-      );
-      req.body.images = uploadedImages.map(img => ({
-        url: img.url,
-        public_id: img.public_id,
-        alt: req.body.name || product.name
-      }));
     }
 
+    // Update product
     product = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
-    );
+      { 
+        new: true, 
+        runValidators: true 
+      }
+    ).populate('category', 'name slug');
+
+    console.log('✅ Product updated successfully');
 
     res.status(200).json({
       success: true,
@@ -341,16 +345,16 @@ exports.updateProduct = async (req, res) => {
       product
     });
   } catch (error) {
-    console.error('Update product error:', error);
+    console.error('❌ Update product error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update product'
+      message: error.message || 'Failed to update product'
     });
   }
 };
 
 // @desc    Delete product
-// @route   DELETE /api/products/:id
+// @route   DELETE /api/admin/products/:id
 // @access  Private/Admin
 exports.deleteProduct = async (req, res) => {
   try {
@@ -363,33 +367,133 @@ exports.deleteProduct = async (req, res) => {
       });
     }
 
-    // Delete images from Cloudinary
-    if (product.images && product.images.length > 0) {
-      for (const img of product.images) {
-        if (img.public_id) {
-          await deleteImage(img.public_id);
-        }
-      }
-    }
-
     // Soft delete by setting isActive to false
     product.isActive = false;
     await product.save();
 
-    // Update category product count
-    const category = await Category.findById(product.category);
-    if (category) {
-      await category.updateProductCount();
-    }
+    console.log('✅ Product soft-deleted:', product._id);
 
     res.status(200).json({
       success: true,
       message: 'Product deleted successfully'
     });
   } catch (error) {
+    console.error('❌ Delete product error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete product'
+    });
+  }
+};
+
+// @desc    Get all products for admin (includes hidden/inactive)
+// @route   GET /api/admin/products
+// @access  Private/Admin
+exports.getAdminProducts = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Admin can see ALL products
+    const filter = {};
+
+    if (req.query.category) {
+      filter.category = req.query.category;
+    }
+
+    if (req.query.search) {
+      filter.$or = [
+        { name: new RegExp(req.query.search, 'i') },
+        { partNumber: new RegExp(req.query.search, 'i') }
+      ];
+    }
+
+    if (req.query.isActive !== undefined) {
+      filter.isActive = req.query.isActive === 'true';
+    }
+
+    if (req.query.isVisible !== undefined) {
+      filter.isVisible = req.query.isVisible === 'true';
+    }
+
+    const products = await Product.find(filter)
+      .populate('category', 'name slug')
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(skip);
+
+    const total = await Product.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      products
+    });
+  } catch (error) {
+    console.error('Get admin products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products'
+    });
+  }
+};
+
+// @desc    Toggle product visibility
+// @route   PATCH /api/admin/products/:id/visibility
+// @access  Private/Admin
+exports.toggleProductVisibility = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    product.isVisible = !product.isVisible;
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Product ${product.isVisible ? 'shown' : 'hidden'} successfully`,
+      product
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to toggle visibility'
+    });
+  }
+};
+
+// @desc    Get low stock products
+// @route   GET /api/admin/products/low-stock
+// @access  Private/Admin
+exports.getLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      stock: { $lte: 5, $gt: 0 },
+      isActive: true
+    })
+      .populate('category', 'name')
+      .sort({ stock: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch low stock products'
     });
   }
 };

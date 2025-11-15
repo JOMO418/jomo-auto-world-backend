@@ -4,49 +4,88 @@ const router = express.Router();
 const {
   getDashboardStats,
   getAllOrders,
-  getAllUsers,
-  updateUser,
-  getSalesReport
+  updateOrderStatus,
+  getRecentActivity,
+  getLowStockProducts,
+  getAdminProducts,
+  toggleProductVisibility
 } = require('../controllers/adminController');
-const { protect } = require('../middleware/auth');
-const { admin } = require('../middleware/admin');
 const {
-  paginationValidation,
+  createProduct,
+  updateProduct,
+  deleteProduct
+} = require('../controllers/productController');
+const { protect, isAdmin } = require('../middleware/auth');
+const { uploadMultiple } = require('../middleware/upload');
+const {
+  createProductValidation,
+  updateProductValidation,
   mongoIdValidation,
   handleValidationErrors
 } = require('../utils/validation');
 
-// All admin routes require authentication and admin role
-router.use(protect);
-router.use(admin);
+// Apply auth middleware to all admin routes
+router.use(protect, isAdmin);
 
-// Dashboard
-router.get('/dashboard', getDashboardStats);
+// ========== DASHBOARD ==========
+// GET /api/admin/dashboard-stats
+router.get('/dashboard-stats', getDashboardStats);
 
-// Orders management
-router.get(
-  '/orders',
-  paginationValidation,
-  handleValidationErrors,
-  getAllOrders
+// GET /api/admin/recent-activity
+router.get('/recent-activity', getRecentActivity);
+
+// ========== PRODUCTS ==========
+// GET /api/admin/products (includes hidden/inactive)
+router.get('/products', getAdminProducts);
+
+// GET /api/admin/products/low-stock
+router.get('/products/low-stock', getLowStockProducts);
+
+// POST /api/admin/products
+router.post(
+  '/products', 
+  /* uploadMultiple,
+  createProductValidation,
+  handleValidationErrors,*/
+  createProduct
 );
 
-// Users management
-router.get(
-  '/users',
-  paginationValidation,
-  handleValidationErrors,
-  getAllUsers
-);
-
+// PUT /api/admin/products/:id
 router.put(
-  '/users/:id',
+  '/products/:id',
+  uploadMultiple,
+  mongoIdValidation,
+  updateProductValidation,
+  handleValidationErrors,
+  updateProduct
+);
+
+// DELETE /api/admin/products/:id
+router.delete(
+  '/products/:id',
   mongoIdValidation,
   handleValidationErrors,
-  updateUser
+  deleteProduct
 );
 
-// Reports
-router.get('/reports/sales', getSalesReport);
+// PATCH /api/admin/products/:id/visibility
+router.patch(
+  '/products/:id/visibility',
+  mongoIdValidation,
+  handleValidationErrors,
+  toggleProductVisibility
+);
+
+// ========== ORDERS ==========
+// GET /api/admin/orders
+router.get('/orders', getAllOrders);
+
+// PATCH /api/admin/orders/:id/status
+router.patch(
+  '/orders/:id/status',
+  mongoIdValidation,
+  handleValidationErrors,
+  updateOrderStatus
+);
 
 module.exports = router;

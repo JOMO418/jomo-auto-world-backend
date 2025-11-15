@@ -1,100 +1,148 @@
 // controllers/adminController.js
-const Order = require('../models/Order');
 const Product = require('../models/Product');
+const Order = require('../models/Order');
 const User = require('../models/User');
-const Category = require('../models/Category');
 
 // @desc    Get dashboard statistics
-// @route   GET /api/admin/dashboard
+// @route   GET /api/admin/dashboard-stats
 // @access  Private/Admin
 exports.getDashboardStats = async (req, res) => {
   try {
-    // Date ranges
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const now = new Date();
+    const today = new Date(now.setHours(0, 0, 0, 0));
+    const thisWeekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Total stats
-    const [
-      totalOrders,
-      totalProducts,
-      totalUsers,
-      totalRevenue,
-      todayOrders,
-      thisMonthOrders,
-      pendingOrders,
-      lowStockProducts
-    ] = await Promise.all([
-      Order.countDocuments(),
-      Product.countDocuments({ isActive: true }),
-      User.countDocuments(),
-      Order.aggregate([
-        { $match: { paymentStatus: 'completed' } },
-        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-      ]),
-      Order.countDocuments({ createdAt: { $gte: today } }),
-      Order.countDocuments({ createdAt: { $gte: thisMonth } }),
-      Order.countDocuments({ orderStatus: 'processing' }),
-      Product.countDocuments({ stock: { $lte: 5 }, isActive: true })
-    ]);
+    // Today's stats
+    const todayOrders = await Order.countDocuments({
+      createdAt: { $gte: today }
+    });
 
-    // Sales trend (last 30 days)
-    const salesTrend = await Order.aggregate([
+    const todayRevenue = await Order.aggregate([
       {
         $match: {
-          createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          createdAt: { $gte: today },
           paymentStatus: 'completed'
         }
       },
       {
         $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          sales: { $sum: '$totalAmount' },
+          _id: null,
+          total: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    // Pending orders
+    const pendingOrders = await Order.countDocuments({
+      orderStatus: { $in: ['processing', 'confirmed'] }
+    });
+
+    // Low stock count
+    const lowStockCount = await Product.countDocuments({
+      stock: { $lte: 5, $gt: 0 },
+      isActive: true
+    });
+
+    // Out of stock count
+    const outOfStockCount = await Product.countDocuments({
+      stock: 0,
+      isActive: true
+    });
+
+    // Total products
+    const totalProducts = await Product.countDocuments({
+      isActive: true
+    });
+
+    // This week's revenue
+    const weekRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thisWeekStart },
+          paymentStatus: 'completed'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    // This month's revenue
+    const monthRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: thisMonthStart },
+          paymentStatus: 'completed'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    // Total customers
+    const totalCustomers = await User.countDocuments({
+      role: 'customer'
+    });
+
+    // Revenue trend (last 7 days)
+    const last7Days = new Date(now.setDate(now.getDate() - 7));
+    const revenueTrend = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: last7Days },
+          paymentStatus: 'completed'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+          },
+          revenue: { $sum: '$totalAmount' },
           orders: { $sum: 1 }
         }
       },
-      { $sort: { _id: 1 } }
+      {
+        $sort: { _id: 1 }
+      }
     ]);
-
-    // Top products
-    const topProducts = await Product.find({ isActive: true })
-      .sort({ soldCount: -1 })
-      .limit(5)
-      .select('name soldCount price images');
-
-    // Recent orders
-    const recentOrders = await Order.find()
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .select('orderNumber totalAmount orderStatus paymentStatus createdAt');
-
-    // Category distribution
-    const categoryStats = await Category.getAllWithCount();
 
     res.status(200).json({
       success: true,
-      data: {
-        overview: {
-          totalOrders,
-          totalProducts,
-          totalUsers,
-          totalRevenue: totalRevenue[0]?.total || 0,
-          todayOrders,
-          thisMonthOrders,
-          pendingOrders,
-          lowStockProducts
+      stats: {
+        today: {
+          orders: todayOrders,
+          revenue: todayRevenue[0]?.total || 0
         },
-        salesTrend,
-        topProducts,
-        recentOrders,
-        categoryStats
+        week: {
+          revenue: weekRevenue[0]?.total || 0
+        },
+        month: {
+          revenue: monthRevenue[0]?.total || 0
+        },
+        orders: {
+          pending: pendingOrders,
+          total: await Order.countDocuments()
+        },
+        products: {
+          total: totalProducts,
+          lowStock: lowStockCount,
+          outOfStock: outOfStockCount
+        },
+        customers: totalCustomers,
+        revenueTrend
       }
     });
   } catch (error) {
-    console.error('Dashboard stats error:', error);
+    console.error('Get dashboard stats error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard statistics'
@@ -102,7 +150,40 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// @desc    Get all orders (admin)
+// @desc    Get recent activity (orders & products)
+// @route   GET /api/admin/recent-activity
+// @access  Private/Admin
+exports.getRecentActivity = async (req, res) => {
+  try {
+    // Last 10 orders
+    const recentOrders = await Order.find()
+      .populate('user', 'name email phone')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('orderNumber totalAmount orderStatus paymentStatus createdAt');
+
+    // Last 10 products added
+    const recentProducts = await Product.find()
+      .populate('category', 'name')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('name price stock images createdAt');
+
+    res.status(200).json({
+      success: true,
+      recentOrders,
+      recentProducts
+    });
+  } catch (error) {
+    console.error('Get recent activity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch recent activity'
+    });
+  }
+};
+
+// @desc    Get all orders (admin view)
 // @route   GET /api/admin/orders
 // @access  Private/Admin
 exports.getAllOrders = async (req, res) => {
@@ -113,11 +194,11 @@ exports.getAllOrders = async (req, res) => {
 
     // Build filter
     const filter = {};
-    
+
     if (req.query.status) {
       filter.orderStatus = req.query.status;
     }
-    
+
     if (req.query.paymentStatus) {
       filter.paymentStatus = req.query.paymentStatus;
     }
@@ -125,12 +206,15 @@ exports.getAllOrders = async (req, res) => {
     if (req.query.search) {
       filter.$or = [
         { orderNumber: new RegExp(req.query.search, 'i') },
-        { 'shippingAddress.name': new RegExp(req.query.search, 'i') }
+        { 'shippingAddress.name': new RegExp(req.query.search, 'i') },
+        { 'shippingAddress.phone': new RegExp(req.query.search, 'i') }
       ];
     }
 
+    // Execute query
     const orders = await Order.find(filter)
       .populate('user', 'name email phone')
+      .populate('items.product', 'name images')
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip);
@@ -146,6 +230,7 @@ exports.getAllOrders = async (req, res) => {
       orders
     });
   } catch (error) {
+    console.error('Get all orders error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch orders'
@@ -153,169 +238,161 @@ exports.getAllOrders = async (req, res) => {
   }
 };
 
-// @desc    Get all users
-// @route   GET /api/admin/users
+// @desc    Update order status
+// @route   PATCH /api/admin/orders/:id/status
 // @access  Private/Admin
-exports.getAllUsers = async (req, res) => {
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { status, note } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status is required'
+      });
+    }
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Update status using the model method
+    order.updateStatus(status, note, req.user._id);
+    await order.save();
+
+    // Populate order details for response
+    await order.populate('user', 'name email phone');
+
+    res.status(200).json({
+      success: true,
+      message: `Order status updated to ${status}`,
+      order
+    });
+  } catch (error) {
+    console.error('Update order status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status'
+    });
+  }
+};
+
+// @desc    Get low stock products
+// @route   GET /api/admin/products/low-stock
+// @access  Private/Admin
+exports.getLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      stock: { $lte: 5, $gt: 0 },
+      isActive: true
+    })
+      .populate('category', 'name')
+      .sort({ stock: 1 })
+      .select('name partNumber stock images price');
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      products
+    });
+  } catch (error) {
+    console.error('Get low stock products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch low stock products'
+    });
+  }
+};
+
+// @desc    Get all products for admin (includes hidden/inactive)
+// @route   GET /api/admin/products
+// @access  Private/Admin
+exports.getAdminProducts = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
+    // Admin can see ALL products
     const filter = {};
-    
-    if (req.query.role) {
-      filter.role = req.query.role;
+
+    if (req.query.category) {
+      filter.category = req.query.category;
     }
 
     if (req.query.search) {
       filter.$or = [
         { name: new RegExp(req.query.search, 'i') },
-        { email: new RegExp(req.query.search, 'i') },
-        { phone: new RegExp(req.query.search, 'i') }
+        { partNumber: new RegExp(req.query.search, 'i') }
       ];
     }
 
-    const users = await User.find(filter)
-      .select('-password')
+    if (req.query.isActive !== undefined) {
+      filter.isActive = req.query.isActive === 'true';
+    }
+
+    if (req.query.isVisible !== undefined) {
+      filter.isVisible = req.query.isVisible === 'true';
+    }
+
+    const products = await Product.find(filter)
+      .populate('category', 'name slug')
+      .populate('createdBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(skip);
 
-    const total = await User.countDocuments(filter);
+    const total = await Product.countDocuments(filter);
 
     res.status(200).json({
       success: true,
-      count: users.length,
+      count: products.length,
       total,
       page,
       pages: Math.ceil(total / limit),
-      users
+      products
     });
   } catch (error) {
+    console.error('Get admin products error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch users'
+      message: 'Failed to fetch products'
     });
   }
 };
 
-// @desc    Update user
-// @route   PUT /api/admin/users/:id
+// @desc    Toggle product visibility
+// @route   PATCH /api/admin/products/:id/visibility
 // @access  Private/Admin
-exports.updateUser = async (req, res) => {
+exports.toggleProductVisibility = async (req, res) => {
   try {
-    const { role, isActive } = req.body;
+    const product = await Product.findById(req.params.id);
 
-    const user = await User.findById(req.params.id);
-
-    if (!user) {
+    if (!product) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'Product not found'
       });
     }
 
-    // Prevent modifying own admin role
-    if (user._id.toString() === req.user.id && role && role !== 'admin') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot change your own admin role'
-      });
-    }
-
-    if (role) user.role = role;
-    if (typeof isActive !== 'undefined') user.isActive = isActive;
-
-    await user.save();
+    product.isVisible = !product.isVisible;
+    await product.save();
 
     res.status(200).json({
       success: true,
-      message: 'User updated successfully',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive
-      }
+      message: `Product ${product.isVisible ? 'shown' : 'hidden'} successfully`,
+      product
     });
   } catch (error) {
+    console.error('Toggle visibility error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update user'
-    });
-  }
-};
-
-// @desc    Get sales report
-// @route   GET /api/admin/reports/sales
-// @access  Private/Admin
-exports.getSalesReport = async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
-
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const end = endDate ? new Date(endDate) : new Date();
-
-    const salesStats = await Order.getSalesStats(start, end);
-
-    // Daily breakdown
-    const dailySales = await Order.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: start, $lte: end },
-          paymentStatus: 'completed'
-        }
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          sales: { $sum: '$totalAmount' },
-          orders: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
-
-    // Top products in period
-    const topProducts = await Order.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: start, $lte: end },
-          paymentStatus: 'completed'
-        }
-      },
-      { $unwind: '$items' },
-      {
-        $group: {
-          _id: '$items.product',
-          name: { $first: '$items.name' },
-          totalQuantity: { $sum: '$items.quantity' },
-          totalRevenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
-        }
-      },
-      { $sort: { totalRevenue: -1 } },
-      { $limit: 10 }
-    ]);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        summary: salesStats,
-        dailySales,
-        topProducts,
-        period: {
-          start: start.toISOString(),
-          end: end.toISOString()
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Sales report error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to generate sales report'
+      message: 'Failed to toggle visibility'
     });
   }
 };
