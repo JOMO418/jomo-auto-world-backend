@@ -36,6 +36,7 @@ app.use('/api', limiter);
 // CORS Configuration - PRODUCTION READY
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  'https://jomoautoworld.netlify.app',
   'http://localhost:3000',
   'http://localhost:5000'
 ].filter(Boolean);
