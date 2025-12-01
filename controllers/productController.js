@@ -301,15 +301,15 @@ exports.createProduct = async (req, res) => {
     });
   }
 };
-
 // @desc    Update product
 // @route   PUT /api/admin/products/:id
 // @access  Private/Admin
 exports.updateProduct = async (req, res) => {
   try {
-    console.log('📝 Updating product:', req.params.id);
+    console.log('🔄 Updating product:', req.params.id);
     console.log('📝 Update data:', req.body);
 
+    // Validate product exists
     let product = await Product.findById(req.params.id);
 
     if (!product) {
@@ -319,12 +319,25 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    // Handle category slug to ObjectId conversion
+    // ✅ THE FIX: Handle category conversion (slug to ObjectId)
     if (req.body.category && typeof req.body.category === 'string') {
-      const category = await Category.findOne({ slug: req.body.category });
-      if (category) {
+      const mongoose = require('mongoose');
+      
+      // Check if it's already a valid ObjectId
+      if (!mongoose.Types.ObjectId.isValid(req.body.category)) {
+        // ✅ It's NOT a valid ObjectId, so it must be a slug
+        const category = await Category.findOne({ slug: req.body.category });
+        
+        if (!category) {
+          return res.status(400).json({
+            success: false,
+            message: `Category with slug '${req.body.category}' not found`
+          });
+        }
+        
         req.body.category = category._id;
       }
+      // ✅ If it IS a valid ObjectId, leave it as is!
     }
 
     // Update product
@@ -346,9 +359,15 @@ exports.updateProduct = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Update product error:', error);
+    
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update product'
+      message: error.message || 'Failed to update product',
+      error: process.env.NODE_ENV === 'development' ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      } : undefined
     });
   }
 };
