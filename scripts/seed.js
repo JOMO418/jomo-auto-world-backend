@@ -1,4 +1,4 @@
-// scripts/seed.js - WITH 2 EXAMPLE PRODUCTS
+// scripts/seed.js - COMPLETE VERSION WITH 2 SAMPLE PRODUCTS
 const mongoose = require('mongoose');
 require('dotenv').config();
 
@@ -23,7 +23,7 @@ const createSlug = (text) => {
     .replace(/(^-|-$)/g, '');
 };
 
-// Categories
+// Sample Categories
 const categories = [
   {
     name: 'Suspension & Steering',
@@ -75,13 +75,12 @@ const categories = [
   }
 ];
 
-// Just 2 EXAMPLE products with placeholder images
-// Admin should DELETE these and add their own!
-const exampleProducts = [
+// Just 2 EXAMPLE products - Admin should DELETE these and add real products!
+const sampleProducts = [
   {
     name: 'Example Product - Oil Filter',
     slug: createSlug('Example Product - Oil Filter'),
-    description: 'This is an EXAMPLE product. Admin should delete this and add real products with actual photos.',
+    description: 'This is an EXAMPLE product. Admin should delete this and add real products with actual photos of their inventory.',
     shortDescription: 'Example product - please replace with actual inventory',
     price: 1000,
     originalPrice: 1500,
@@ -92,7 +91,7 @@ const exampleProducts = [
     ],
     images: [
       {
-        url: 'https://via.placeholder.com/400x300?text=Add+Real+Product+Photo',
+        url: 'https://via.placeholder.com/400x300/3B82F6/FFFFFF?text=Add+Real+Product+Photo',
         alt: 'Placeholder - Add real photo'
       }
     ],
@@ -108,12 +107,12 @@ const exampleProducts = [
     rating: 0,
     numReviews: 0,
     soldCount: 0,
-    tags: ['example', 'delete-me']
+    tags: ['example', 'delete-me', 'engine']
   },
   {
     name: 'Example Product - Brake Pads',
     slug: createSlug('Example Product - Brake Pads'),
-    description: 'This is an EXAMPLE product. Admin should delete this and add real products with actual photos.',
+    description: 'This is an EXAMPLE product. Admin should delete this and add real products with actual photos of their inventory.',
     shortDescription: 'Example product - please replace with actual inventory',
     price: 5000,
     originalPrice: 7000,
@@ -124,7 +123,7 @@ const exampleProducts = [
     ],
     images: [
       {
-        url: 'https://via.placeholder.com/400x300?text=Add+Real+Product+Photo',
+        url: 'https://via.placeholder.com/400x300/EF4444/FFFFFF?text=Add+Real+Product+Photo',
         alt: 'Placeholder - Add real photo'
       }
     ],
@@ -140,7 +139,7 @@ const exampleProducts = [
     rating: 0,
     numReviews: 0,
     soldCount: 0,
-    tags: ['example', 'delete-me']
+    tags: ['example', 'delete-me', 'brakes']
   }
 ];
 
@@ -161,7 +160,7 @@ async function seedDatabase() {
     const admin = await User.create({
       name: 'Jomo Admin',
       email: 'jomo@autoworld.co.ke',
-      password: 'wanjiku2025',
+      password: 'wanjiku2025', // Plain password - model will hash it
       phone: '+254712345678',
       role: 'admin',
       isVerified: true,
@@ -176,7 +175,7 @@ async function seedDatabase() {
     const customer = await User.create({
       name: 'John Kamau',
       email: 'customer@example.com',
-      password: 'Customer@123',
+      password: 'Customer@123', // Plain password - model will hash it
       phone: '+254723456789',
       role: 'customer',
       isVerified: true,
@@ -198,12 +197,22 @@ async function seedDatabase() {
     const createdCategories = await Category.insertMany(categories);
     console.log(`✅ Created ${createdCategories.length} categories\n`);
 
-    // Create example products (admin should delete these)
+    // Create EXAMPLE products (admin should delete these)
     console.log('📦 Creating EXAMPLE products...');
-    const productsWithCategories = exampleProducts.map((product, index) => ({
-      ...product,
-      category: createdCategories[index % createdCategories.length]._id
-    }));
+    const productsWithCategories = sampleProducts.map((product, index) => {
+      // Assign to appropriate category based on tags
+      let categoryIndex = 0;
+      if (product.tags.includes('engine')) {
+        categoryIndex = 1; // Engine Parts
+      } else if (product.tags.includes('brakes')) {
+        categoryIndex = 2; // Braking System
+      }
+
+      return {
+        ...product,
+        category: createdCategories[categoryIndex]._id
+      };
+    });
 
     const createdProducts = await Product.insertMany(productsWithCategories);
     console.log(`✅ Created ${createdProducts.length} EXAMPLE products\n`);
@@ -227,14 +236,18 @@ async function seedDatabase() {
     console.log(`  Password: Customer@123`);
     console.log('\n📊 Database Statistics:');
     console.log(`  Categories: ${createdCategories.length}`);
-    console.log(`  Products: ${createdProducts.length} (EXAMPLES ONLY)`);
+    console.log(`  Products: ${createdProducts.length} (EXAMPLES ONLY - DELETE THESE!)`);
     console.log(`  Users: 2`);
-    console.log('\n⚠️  IMPORTANT - Next Steps:');
+    console.log('\n⚠️  IMPORTANT - Next Steps for Admin:');
     console.log('  1. Login as admin: jomo@autoworld.co.ke');
-    console.log('  2. DELETE the 2 example products');
-    console.log('  3. Add your REAL spare parts with ACTUAL photos');
-    console.log('  4. Upload quality product images');
-    console.log('\n' + '='.repeat(60) + '\n');
+    console.log('  2. Go to Products section');
+    console.log('  3. DELETE the 2 example products');
+    console.log('  4. Click "Add Product" to add REAL spare parts');
+    console.log('  5. Upload quality product images');
+    console.log('  6. Fill in accurate prices and stock levels');
+    console.log('\n💡 The example products are placeholders showing the structure.');
+    console.log('   Replace them with your actual inventory!\n');
+    console.log('='.repeat(60) + '\n');
 
     process.exit(0);
   } catch (error) {
